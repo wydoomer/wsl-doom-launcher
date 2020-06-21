@@ -1,0 +1,216 @@
+#!/bin/bash
+
+port_dir="/mnt/d/DOOM/source_ports/"
+mod_dir="/mnt/d/DOOM/mods/"
+iwad_dir="/mnt/d/DOOM/iwad/"
+wad_dir="/mnt/d/DOOM/wad/doom/"
+random_dir="/mnt/d/DOOM/wad/doom_random/"
+
+declare -a mods
+declare -a ports
+declare -a iwads
+declare -a wads
+
+#source ports
+for i in `find $port_dir -name *.exe| grep -v -e "server" -e "midiproc" -e "setup"`
+do
+  ports+=( "$i")
+done
+function source_ports (){
+n=0
+for i in "${ports[@]}"
+do
+  echo $n. $i
+  ((n=$n+1))
+done
+}
+
+#iwad shit
+for i in `find $iwad_dir -name "*.wad"`
+do
+  iwads+=("$i")
+done
+function iwad_list (){
+n=0
+for i in "${iwads[@]}"
+do
+  echo $n. $i
+  ((n=$n+1))
+done
+}
+
+#wad shit
+for i in `find $wad_dir -name "*.wad"`
+do
+  wads+=("$i")
+done
+function wad_list (){
+n=0
+for i in "${wads[@]}"
+do
+  echo $n. $i
+  ((n=$n+1))
+done
+}
+
+#mod shit
+for i in `find $mod_dir -name "*.pk3"`
+do 
+  mods+=( "$i" )
+done
+function mod_list (){
+n=0
+for i in "${mods[@]}"
+do
+  echo $n. $i
+  ((n=$n+1))
+done
+}
+
+#defaults
+cur_port=${ports[4]}
+cur_iwad="-IWAD `wslpath -w ${iwads[1]}`"
+
+option=(m p r s w j i)
+
+echo "                           ";
+echo "______ _____  ________  ___";
+echo "|  _  \  _  ||  _  |  \/  |";
+echo "| | | | | | || | | | .  . |";
+echo "| | | | | | || | | | |\/| |";
+echo "| |/ /\ \_/ /\ \_/ / |  | |";
+echo "|___/  \___/  \___/\_|  |_/";
+echo "===========================";
+
+if [ -z "$1" ];then
+  echo -e "Usage: DOOM [p (port)] [w (wad) [i (iwad)] [m (mod) [s (search idgames, use with i)] [r (random idgames, use with i)] [j (join, use with i and w) \n"
+  exit 1
+fi
+
+#options
+if [[ ${option[2]} = `echo "$@" |grep -o ${option[2]}` ]]; then 
+  echo "Searching..."
+  id=$(curl -LSs "https://www.doomworld.com/idgames/?random"|grep idgames://|sed -E 's/<[^>]*>//g'|head -1|cut -d'/' -f3)
+  query=$(curl -Ss "https://www.doomworld.com/idgames/api/api.php?action=get&id=$id"|sed -E 's/<[^>]*>//g')
+    if echo $query|grep -E 'levels/doom2/'|grep -vE 'levels/doom2/deathmatch'; then
+    echo "$query"|more
+    read -p "Download and play? (Y/N): " yn
+    case $yn in
+      [Yy]* )
+        url=$(curl -Ss "https://www.doomworld.com/idgames/api/api.php?action=get&id=$id&out=json"|jq .|grep '"url":'|cut -d'"' -f4)
+        filename=$(curl -Ss "https://www.doomworld.com/idgames/api/api.php?action=get&id=$id&out=json"|jq .|grep '"filename":'|cut -d'"' -f4)
+	download=`curl -Ss "$url" |grep $filename|grep -E 'http|ftp'|cut -d'"' -f2|head -1`
+	echo "url is $download"
+	wget --directory-prefix=$random_dir $download
+	unzip $random_dir/$filename -d $random_dir                                    
+	filename=`echo "$filename"|sed 's/\.[^\.]*$//'`                          
+	rm $random_dir/$filename.zip                                                
+	file=$filename
+	filename="-file `wslpath -w $random_dir``ls $random_dir|grep -i $filename.wad`"
+	echo $filename                                                          
+	random=1
+	;;
+      [Nn]* )
+        DOOM r i p
+        exit
+	;;
+	esac
+     fi
+fi
+
+if [[ ${option[3]} = `echo "$@" |grep -o ${option[3]}` ]]; then
+  echo "Type in the search term, and make note of the id: "
+  read search
+  query="$(curl -Ss "https://www.doomworld.com/idgames/api/api.php?action=search&query=`echo $search | sed -e "s/ /+/g"`&type=title&sort=date&out=json"|jq .|grep -vE '"dir":|"size":|"age":|"rating":|"votes":|"idgamesurl":|"meta":|"version":|"content":|"file":'|awk -F'[{}]' '{print $1}'|sed 's/.$//'|sed '${/^[[:space:]]*$/d;}')"
+    if echo $query|grep -Eq '"type": "No Results"' ; then
+      echo "No WAD found, get outta here"
+      exit
+    else
+      echo "$query"|more
+      echo "Give me the id:"
+      read id
+      query=$(curl -Ss "https://www.doomworld.com/idgames/api/api.php?action=get&id=$id"|sed -E 's/<[^>]*>//g')
+      echo "$query"|more
+      read -p "Download and play? (Y/N): " yn
+      case $yn in
+        [Yy]* )
+          url=`curl -Ss "https://www.doomworld.com/idgames/api/api.php?action=get&id=$id&out=json"|jq .|grep '"url":'|cut -d'"' -f4`
+          filename=`curl -Ss "https://www.doomworld.com/idgames/api/api.php?action=get&id=$id&out=json"|jq .|grep '"filename":'|cut -d'"' -f4`
+ 	  download=`curl -Ss "$url" |grep $filename|grep -E 'http|ftp'|cut -d'"' -f2|head -1`
+	  echo "url is $download"
+	  wget --directory-prefix=$wad_dir $download
+	  unzip $wad_dir/$filename -d $wad_dir
+	  filename=`echo "$filename"|sed 's/\.[^\.]*$//'`
+	  rm $wad_dir/$filename.zip
+	  cur_wad="-file `wslpath -w $wad_dir``ls $wad_dir|grep -i $filename.wad`"
+	  echo $cur_wad
+	  ;;
+	[Nn]* )
+	  exit
+	  ;;
+	  esac
+      fi
+fi
+if [[ ${option[0]} = `echo "$@" |grep -o ${option[0]}` ]]; then
+  echo -e "pick a mod, note the id: \n $(mod_list)"|more
+  echo "enter mod id: "
+  read mod_id
+  echo "Loaded ${mods[$mod_id]}"
+  cur_mod="`wslpath -w ${mods[$mod_id]}`"
+fi
+if [[ ${option[4]} = `echo "$@" |grep -o ${option[4]}` ]]; then
+  echo -e "Note the wad id: \n $(wad_list)"|more
+  echo "input the wad id: "
+  read wad_id
+  echo ${wads[$wad_id]}
+  cur_wad="-file `wslpath -w ${wads[$wad_id]}`"
+fi
+if [[ ${option[1]} = `echo "$@" |grep -o ${option[1]}` ]]; then	
+  echo -e "Note the port id: \n $(source_ports)"|more
+  echo "input the port id: "
+  read pid
+  echo "Loaded ${ports[$pid]}"
+  cur_port=${ports[$pid]}
+fi
+if [[ ${option[6]} = `echo "$@" |grep -o ${option[6]}` ]]; then
+  echo -e "input the iwad id: \n $(iwad_list)"
+  read iwad_id
+  cur_iwad="-IWAD `wslpath -w ${iwads[$iwad_id]}`"
+fi
+if [[ ${option[5]} = `echo "$@" |grep -o ${option[5]}` ]]; then
+  cur_port="${ports[9]}" 
+  echo -e "Choose an iwad, note the id: \n $(iwad_list)"|more
+  echo "enter iwad id: "
+  read iwad_id
+  echo -e "Choose a wad, note the id:#\n $(wad_list)"|more
+  echo "enter wad id: "
+  read wad_id
+  echo "enter host ip: "
+  read ip			
+  $cur_port -iwad `wslpath -w ${iwads[$iwad_id]}` -file `wslpath -w ${wads[$wad_id]}` -record -connect $ip
+  echo " $cur_port -iwad `wslpath -w ${iwads[$iwad_id]}` -file `wslpath -w ${wads[$wad_id]}` -connect $ip"
+  exit
+fi
+
+$cur_port $cur_iwad $cur_wad $cur_mod
+echo "LAUNCHING DOOM: $cur_port $cur_iwad $cur_wad $cur_mod"
+	
+if [ -z "$random" ]; then
+  exit
+else
+  read -p "Save WAD? (Y/N): " yn                                            
+  case $yn in                                                           
+  [Yy]* )                                                   
+    echo "Saving $file: "                         
+    for i in `find $random_dir -iname "$file.*"`
+      do mv $i $wad_dir
+    done
+    exit                                              
+    ;;                                                
+  [Nn]* )                                                   
+    echo "Not saving, see ya!"                        
+    exit                                              
+    ;;                                                
+    esac                                                              
+fi
+exit

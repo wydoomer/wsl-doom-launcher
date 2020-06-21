@@ -1,5 +1,6 @@
 # wsl-doom-launcher
 WSL Bash Doom Launcher
+
 A way to launch doom from WSL CLI.
 
 - option r: Will find a random WAD from the idgames archive, download and play it.
